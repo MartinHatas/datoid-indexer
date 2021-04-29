@@ -24,7 +24,7 @@ public class IndexService {
     public void executeIndexJob() {
         log.info("Starting index job");
         datoid.getLatestItemsHtml()
-        .flattenAsFlowable(parser::parseItemHtlmPage)
+        .flattenAsFlowable(parser::parseItemHtmlPage)
         .subscribe(i -> log.info("{}", i), e -> log.error("Error", e));
     }
 
