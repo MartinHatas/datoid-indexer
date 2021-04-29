@@ -8,6 +8,8 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.inject.Singleton;
 import java.time.LocalTime;
@@ -20,6 +22,8 @@ import static java.time.format.DateTimeFormatter.ISO_LOCAL_TIME;
 
 @Singleton
 public class DatoidItemParser {
+
+    private static final Logger log = LoggerFactory.getLogger(DatoidItemParser.class);
 
     private static final String SUFFIX_SPAN_CLASS = ".suffix";
     private static final String FILENAME_SPAN_CLASS = ".filename";
@@ -49,7 +53,11 @@ public class DatoidItemParser {
 
         Elements newestItems = Option.of(document.getElementById(NEWEST_DIV_ID))
                 .map(newestDiv -> newestDiv.getElementsByTag(LI))
-                .getOrElse(Elements::new);
+                .getOrElse(() -> {
+                    log.warn("Can't find any item in source: \n {}", htmlPage);
+                    return new Elements();
+                });
+
 
         return newestItems.stream()
                 .map(this::elementToItem)
