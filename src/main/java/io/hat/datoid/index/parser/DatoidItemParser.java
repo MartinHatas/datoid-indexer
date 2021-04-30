@@ -1,7 +1,6 @@
 package io.hat.datoid.index.parser;
 
 import io.hat.datoid.index.model.Item;
-import io.micronaut.context.annotation.Value;
 import io.vavr.API;
 import io.vavr.Tuple;
 import io.vavr.Tuple2;
@@ -9,47 +8,40 @@ import io.vavr.control.Option;
 import io.vavr.control.Try;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Singleton;
+import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-import static io.vavr.API.*;
+import static io.vavr.API.$;
+import static io.vavr.API.Case;
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_TIME;
+import static java.util.stream.Collectors.toMap;
 
 @Singleton
 public class DatoidItemParser {
 
     private static final Logger log = LoggerFactory.getLogger(DatoidItemParser.class);
 
-    private static final String SUFFIX_SPAN_CLASS = ".suffix";
-    private static final String FILENAME_SPAN_CLASS = ".filename";
     private static final String NEWEST_DIV_ID = "snippet--newest_files";
-    private static final String TIME_ICON_CLASS = ".icon-time-white";
-    private static final String SIZE_ICON_CLASS = ".icon-size-white";
-    private static final String DATA_COUNT_ATTR = "data-count";
 
-    private static final String SRC = "src";
     private static final String LI = "li";
     private static final String A = "a";
     private static final String HREF = "href";
-    private static final String THUMB_DIV_CLASS = ".thumb";
-    private static final String IMG = "img";
-    private static final String WIDTH = "width";
-    private static final String HEIGHT = "height";
 
     private static final String GB = " GB";
     private static final String MB = " MB";
     private static final String KB = " KB";
     private static final String B = " B";
     private static final String EMPTY = "";
-
-    @Value("${datoid.url}") private String datoidUrl;
+    public static final DateTimeFormatter DATOID_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    public static final int I1024 = 1024;
 
     public List<Tuple2<String, String>> getItemsPaths(String htmlPage) {
         var document = Jsoup.parse(htmlPage);
@@ -67,44 +59,68 @@ public class DatoidItemParser {
                 ).getOrElse(List::of);
     }
 
-    public List<Item> parseItemHtmlPage(String htmlPage) {
+    public Item parseItemHtmlPage(String htmlPage) {
 
         Document document = Jsoup.parse(htmlPage);
 
-        Elements newestItems = Option.of(document.getElementById(NEWEST_DIV_ID))
-                .map(newestDiv -> newestDiv.getElementsByTag(LI))
-                .getOrElse(() -> {
-                    log.warn("Can't find any item in source: \n {}", htmlPage);
-                    return new Elements();
-                });
+        String link = Option.of(document.selectFirst(".share-file .field"))
+                        .flatMap(s -> Option.of(s.selectFirst("input")))
+                        .flatMap(s -> Option.of(s.attr("value")))
+                        .getOrNull();
 
+        var params =
+                Option.of(document.selectFirst(".parameters"))
+                .map(table -> table.select("tr"))
+                .map(rows ->
+                    rows.stream()
+                        .collect(toMap(
+                            r -> r.selectFirst("th").text(),
+                            r -> r.selectFirst("td").text()
+                        ))
+                ).getOrElse(Map.of());
 
-        return newestItems.stream()
-                .map(this::elementToItem)
-                .collect(Collectors.toList());
+        return new Item(
+                link,
+                getStringParam("Název souboru:", params),
+                getSizeInKilobytes("Velikost:", params),
+                getDateParam("Datum nahrání:", params),
+                getStringParam("Typ souboru:", params),
+                getResolution("Rozlišení:", params),
+                getLengthInSeconds("Délka:", params),
+                getIntParam("Fps:", params),
+                getStringParam("Audio kodek:", params)
+                );
     }
 
-    private Item elementToItem(Element element) {
-        Element linkElement = element.selectFirst(A);
-
-        String filename = element.selectFirst(FILENAME_SPAN_CLASS).text();
-        String link = datoidUrl + linkElement.attr(HREF);
-        Item.Thumbnail thumbnail = getThumbnail(linkElement);
-        String suffix = Option.of(element.selectFirst(SUFFIX_SPAN_CLASS)).map(Element::text).getOrNull();
-        Integer lengthSeconds = getLengthInSeconds(element);
-        Long sizeKilobytes = getSizeInKilobytes(element);
-
-        return new Item(filename, link, thumbnail, suffix, lengthSeconds, sizeKilobytes);
+    private Item.Resolution getResolution(String key, Map<String, String> params) {
+        return Option.of(params.get(key))
+                .map(res -> res.split("x", 2))
+                .flatMap(res -> Try.of(() -> new Item.Resolution(Integer.parseInt(res[0]), Integer.parseInt(res[1]))).toOption())
+                .getOrNull();
     }
 
-    private Long getSizeInKilobytes(Element element) {
-        return Option.of(element.selectFirst(SIZE_ICON_CLASS))
-                .map(Element::parent)
-                .map(Element::text)
+    private LocalDate getDateParam(String key, Map<String, String> params) {
+        return Option.of(params.get(key))
+                .flatMap(date -> Try.of(() -> LocalDate.parse(date, DATOID_DATE_FORMAT)).toOption())
+                .getOrNull();
+    }
+
+    private Integer getIntParam(String key, Map<String, String> params) {
+        return Option.of(params.get(key))
+                .flatMap(strint -> Try.of(() -> Integer.parseInt(strint)).toOption())
+                .getOrNull();
+    }
+
+    private String getStringParam(String key, Map<String, String> params) {
+        return params.get(key);
+    }
+
+    private Long getSizeInKilobytes(String key, Map<String, String> params) {
+        return Option.of(params.get(key))
                 .flatMap(sizeText -> API.Match(sizeText).option(
-                        Case($(size -> size.endsWith(GB)), tryParseFileSize(sizeText, GB, 1024 * 1024 * 1024)),
-                        Case($(size -> size.endsWith(MB)), tryParseFileSize(sizeText, MB, 1024 * 1024)),
-                        Case($(size -> size.endsWith(KB)), tryParseFileSize(sizeText, KB, 1024)),
+                        Case($(size -> size.endsWith(GB)), tryParseFileSize(sizeText, GB, I1024 * I1024 * I1024)),
+                        Case($(size -> size.endsWith(MB)), tryParseFileSize(sizeText, MB, I1024 * I1024)),
+                        Case($(size -> size.endsWith(KB)), tryParseFileSize(sizeText, KB, I1024)),
                         Case($(size -> size.endsWith(B)), tryParseFileSize(sizeText, B, 1))
                 )).getOrNull();
     }
@@ -115,21 +131,10 @@ public class DatoidItemParser {
                 .map(Double::longValue).getOrNull();
     }
 
-    private Integer getLengthInSeconds(Element element) {
-        return Option.of(element.selectFirst(TIME_ICON_CLASS))
-                .map(Element::parent)
-                .map(Element::text)
-                .map(time -> Try.of(() -> LocalTime.parse(time, ISO_LOCAL_TIME).toSecondOfDay()).getOrNull())
+    private Integer getLengthInSeconds(String key, Map<String, String> params) {
+        return Option.of(params.get(key))
+                .flatMap(time -> Try.of(() -> LocalTime.parse(time, ISO_LOCAL_TIME).toSecondOfDay()).toOption())
                 .getOrNull();
-    }
-
-    private Item.Thumbnail getThumbnail(Element linkElement) {
-        Element thumbElement = linkElement.selectFirst(THUMB_DIV_CLASS).selectFirst(IMG);
-        String src = thumbElement.attr(SRC);
-        String width = thumbElement.attr(WIDTH);
-        String height = thumbElement.attr(HEIGHT);
-        String count = thumbElement.attr(DATA_COUNT_ATTR);
-        return new Item.Thumbnail(src, width, height, count);
     }
 
 }

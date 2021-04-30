@@ -12,7 +12,7 @@ public interface DatoidHttpClient {
     @Get(value = "/nejstahovanejsi", processes = MediaType.TEXT_HTML)
     Single<String> getLatestItemsHtml();
 
-    @Get(value = "/{prefix}/{item}", processes = MediaType.TEXT_HTML)
+    @Get(value = "{prefix}/{item}", processes = MediaType.TEXT_HTML)
     Single<String> getItem(@PathVariable String prefix, @PathVariable String item);
 
 }

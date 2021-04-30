@@ -1,10 +1,19 @@
 package io.hat.datoid.index.model;
 
-public record Item (String filename, String link, Thumbnail thumbnail,
-                    String suffix, Integer lengthSeconds, Long sizeBytes) {
+import java.time.LocalDate;
 
-    public record Thumbnail(String url, String width, String height, String count) {
-    }
+public record Item(
+        String link,
+        String filename,
+        Long sizeBytes,
+        LocalDate uploadDate,
+        String extension,
+        Resolution resolution,
+        Integer lengthSeconds,
+        Integer fps,
+        String codec
+) {
+    public record Resolution(Integer width, Integer height) {}
 }
 
 
