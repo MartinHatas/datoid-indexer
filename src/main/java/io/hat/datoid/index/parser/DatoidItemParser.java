@@ -1,7 +1,10 @@
 package io.hat.datoid.index.parser;
 
 import io.hat.datoid.index.model.Item;
+import io.micronaut.context.annotation.Value;
 import io.vavr.API;
+import io.vavr.Tuple;
+import io.vavr.Tuple2;
 import io.vavr.control.Option;
 import io.vavr.control.Try;
 import org.jsoup.Jsoup;
@@ -16,8 +19,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static io.vavr.API.$;
-import static io.vavr.API.Case;
+import static io.vavr.API.*;
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_TIME;
 
 @Singleton
@@ -47,6 +49,24 @@ public class DatoidItemParser {
     private static final String B = " B";
     private static final String EMPTY = "";
 
+    @Value("${datoid.url}") private String datoidUrl;
+
+    public List<Tuple2<String, String>> getItemsPaths(String htmlPage) {
+        var document = Jsoup.parse(htmlPage);
+        return Option.of(document.getElementById(NEWEST_DIV_ID))
+                .map(newestDiv -> newestDiv
+                        .getElementsByTag(LI).stream()
+                        .map(li -> Option.of(li.selectFirst(A))
+                                .map(a -> a.attr(HREF))
+                                .map(href -> href.split("/", 2))
+                                .map(split -> Tuple.of(split[0], split[1]))
+                        )
+                        .filter(Option::isDefined)
+                        .map(Option::get)
+                        .collect(Collectors.toList())
+                ).getOrElse(List::of);
+    }
+
     public List<Item> parseItemHtmlPage(String htmlPage) {
 
         Document document = Jsoup.parse(htmlPage);
@@ -68,7 +88,7 @@ public class DatoidItemParser {
         Element linkElement = element.selectFirst(A);
 
         String filename = element.selectFirst(FILENAME_SPAN_CLASS).text();
-        String link = linkElement.attr(HREF);
+        String link = datoidUrl + linkElement.attr(HREF);
         Item.Thumbnail thumbnail = getThumbnail(linkElement);
         String suffix = Option.of(element.selectFirst(SUFFIX_SPAN_CLASS)).map(Element::text).getOrNull();
         Integer lengthSeconds = getLengthInSeconds(element);
