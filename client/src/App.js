@@ -14,8 +14,8 @@ class App extends Component {
 
     doSearch = e => {
         e.preventDefault();
-        var queryParam = this.state.query ? "?q=" + this.state.query : ""
-        fetch(`${SERVER_URL}/_search` + queryParam)
+        var queryParam = this.state.query ? "?query=" + this.state.query : ""
+        fetch(`${SERVER_URL}/search` + queryParam)
             .then(r => r.json())
             .then(r => this.setState({result: r}))
             .catch(e => console.error(e))
@@ -32,14 +32,16 @@ class App extends Component {
                         <input type="submit" value="Search" />
                     </form>
 
+                    { this.state.result && <span> (total results: {this.state.result.total}) </span> }
+
                     <p>
                         { this.state.result ?
-                            this.state.result.hits.hits.length > 0 ?
+                            this.state.result.items.length > 0 ?
                                 <div className="App-results">
                                     <ul>
                                         {
-                                            this.state.result.hits.hits.map((item, idx) => {
-                                                return <li key={idx}><a href={item._source.link} target="_blank">{item._source.filename}</a></li>
+                                            this.state.result.items.map((item, idx) => {
+                                                return <li key={idx}><a href={item.link} target="_blank">{item.filename}</a></li>
                                             })
                                         }
                                     </ul>
