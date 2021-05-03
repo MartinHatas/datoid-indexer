@@ -5,6 +5,6 @@ micronaut:
 datoid:
   url: https://datoid.cz
   poll:
-    interval: 15s
+    interval: 60s
 
 elasticsearch.httpHosts: 'http://localhost:9200'
